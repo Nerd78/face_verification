@@ -114,7 +114,9 @@ class ChallengeService:
         """Routes challenge verification to specific handlers."""
         challenge_type = challenge_type.lower()
         
-        if challenge_type == "smile":
+        if challenge_type == "straight":
+            success, score, msg = True, 1.0, "Looking straight"
+        elif challenge_type == "smile":
             success, score, msg = self.check_smile(face)
         elif challenge_type == "blink":
             success, score, msg = self.check_blink(face)
