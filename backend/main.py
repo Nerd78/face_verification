@@ -90,6 +90,19 @@ def verify_live_challenge(payload: BiometricChallengeCheck):
             detail=f"Challenge processing failed: {str(e)}"
         )
 
+@app.get("/api/v1/users/check-registered")
+def check_user_registered(username_or_email: str, db: Session = Depends(get_db)):
+    """
+    Checks if a username or email is registered in the database.
+    """
+    user = db.query(User).filter((User.username == username_or_email) | (User.email == username_or_email)).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Biometric profile not found. Please register first."
+        )
+    return {"registered": True, "username": user.username}
+
 @app.post("/api/v1/signup", response_model=UserResponse)
 def signup(payload: SignupRequest, db: Session = Depends(get_db)):
     """

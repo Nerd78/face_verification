@@ -297,45 +297,29 @@ export default function GuidedCamera({ mode, userData, onComplete, onCancel }) {
   };
 
   return (
-    <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-        <div>
-          <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 600, margin: 0 }}>
-            {mode === 'signup' ? 'Face Enrollment Setup' : 'Liveness Challenge'}
-          </h3>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-            {mode === 'signup' ? `Pose ${currentSignupPoseIndex + 1} of 5` : 'Active challenge verification'}
-          </span>
-        </div>
-        <button
-          onClick={onCancel}
-          style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer' }}
-        >
-          Cancel
-        </button>
-      </div>
-
-      {errorMessage && (
-        <div className="alert alert-error" style={{ width: '100%', margin: 0 }}>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', fontWeight: 'bold', marginBottom: '0.25rem' }}>
-            <ShieldAlert size={16} /> Error
-          </div>
-          {errorMessage}
-          <button onClick={resetCapture} className="btn-primary" style={{ marginTop: '0.75rem', padding: '0.5rem', fontSize: '0.875rem' }}>
-            Retry Capture
-          </button>
-        </div>
-      )}
-
-      {/* Camera box container */}
-      <div style={{ position: 'relative', width: '380px', height: '420px', borderRadius: '16px', overflow: 'hidden', background: '#000' }}>
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100vw',
+      height: '100vh',
+      zIndex: 9999,
+      background: '#000',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden'
+    }}>
+      {/* Full-screen webcam background */}
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'hidden' }}>
         <Webcam
           audio={false}
           ref={webcamRef}
           screenshotFormat="image/jpeg"
           videoConstraints={{
-            width: 640,
-            height: 480,
+            width: 1280,
+            height: 720,
             facingMode: "user"
           }}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -346,20 +330,20 @@ export default function GuidedCamera({ mode, userData, onComplete, onCancel }) {
           <defs>
             <mask id="camera-guide-mask">
               <rect width="100%" height="100%" fill="white" />
-              {/* Centered oval cutout */}
-              <ellipse cx="190" cy="190" rx="125" ry="155" fill="black" />
+              {/* Centered oval cutout relative to the viewport */}
+              <ellipse cx="50%" cy="45%" rx="135" ry="180" fill="black" />
             </mask>
           </defs>
           
           {/* Semi-transparent Darkened overlay outside the oval */}
-          <rect width="100%" height="100%" fill="rgba(11, 12, 16, 0.75)" mask="url(#camera-guide-mask)" />
+          <rect width="100%" height="100%" fill="rgba(11, 12, 16, 0.82)" mask="url(#camera-guide-mask)" />
           
           {/* Status color border ring */}
           <ellipse
-            cx="190"
-            cy="190"
-            rx="125"
-            ry="155"
+            cx="50%"
+            cy="45%"
+            rx="135"
+            ry="180"
             fill="none"
             stroke={getStatusColor()}
             strokeWidth="4"
@@ -369,83 +353,157 @@ export default function GuidedCamera({ mode, userData, onComplete, onCancel }) {
           {/* Animated stability progress arc */}
           {stabilityPercentage > 0 && (
             <ellipse
-              cx="190"
-              cy="190"
-              rx="125"
-              ry="155"
+              cx="50%"
+              cy="45%"
+              rx="135"
+              ry="180"
               fill="none"
               stroke="var(--status-green)"
               strokeWidth="4"
-              strokeDasharray={`${(stabilityPercentage / 100) * 885} 885`}
-              style={{ transition: 'stroke-dasharray 0.1s linear', transform: 'rotate(-90deg)', transformOrigin: '190px 190px' }}
+              strokeDasharray={`${(stabilityPercentage / 100) * 1000} 1000`}
+              style={{ transition: 'stroke-dasharray 0.1s linear', transform: 'rotate(-90deg)', transformOrigin: 'center' }}
             />
           )}
         </svg>
-
-        {/* Challenge prompt box overlays */}
-        {currentState === STATES.ACTIVE_CHALLENGE && (
-          <div style={{
-            position: 'absolute',
-            top: '20px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: 'rgba(59, 130, 246, 0.95)',
-            color: 'white',
-            padding: '0.4rem 1rem',
-            borderRadius: '20px',
-            fontSize: '0.85rem',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-            boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
-            animation: 'pulse 1.5s infinite'
-          }}>
-            Challenge: {activeChallenge}
-          </div>
-        )}
       </div>
 
-      {/* Info board footer */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: '0.5rem' }}>
+      {/* Top Header Overlay */}
+      <div style={{
+        position: 'absolute',
+        top: '30px',
+        left: '24px',
+        right: '24px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        zIndex: 10010
+      }}>
+        <div>
+          <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 700, margin: 0, textShadow: '0 2px 4px rgba(0,0,0,0.8)', fontSize: '1.4rem' }}>
+            {mode === 'signup' ? 'Face Enrollment Setup' : 'Liveness Challenge'}
+          </h3>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>
+            {mode === 'signup' ? `Pose ${currentSignupPoseIndex + 1} of 5` : 'Active challenge verification'}
+          </span>
+        </div>
+        <button
+          onClick={onCancel}
+          style={{
+            background: 'rgba(255,255,255,0.08)',
+            color: 'var(--text-primary)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            padding: '0.6rem 1.25rem',
+            borderRadius: '12px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            transition: 'background 0.2s'
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+
+      {/* Challenge title overlay */}
+      {currentState === STATES.ACTIVE_CHALLENGE && (
+        <div style={{
+          position: 'absolute',
+          top: '110px',
+          background: 'rgba(59, 130, 246, 0.95)',
+          color: 'white',
+          padding: '0.4rem 1.2rem',
+          borderRadius: '20px',
+          fontSize: '0.85rem',
+          fontWeight: 700,
+          textTransform: 'uppercase',
+          letterSpacing: '1px',
+          boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
+          zIndex: 10015,
+          animation: 'pulse 1.5s infinite'
+        }}>
+          Challenge: {activeChallenge}
+        </div>
+      )}
+
+      {/* Error alert HUD popup */}
+      {errorMessage && (
+        <div className="alert alert-error" style={{
+          position: 'absolute',
+          top: '110px',
+          width: '90%',
+          maxWidth: '360px',
+          zIndex: 10020,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
+          background: 'rgba(239, 68, 68, 0.95)',
+          color: 'white',
+          border: 'none',
+          backdropFilter: 'blur(16px)',
+          margin: 0
+        }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+            <ShieldAlert size={18} /> Error
+          </div>
+          <div style={{ fontSize: '0.9rem', marginBottom: '0.75rem' }}>{errorMessage}</div>
+          <button onClick={resetCapture} className="btn-primary" style={{ padding: '0.5rem', fontSize: '0.875rem', background: 'white', color: '#ef4444' }}>
+            Retry Capture
+          </button>
+        </div>
+      )}
+
+      {/* Bottom HUD overlay for Guidance */}
+      <div style={{
+        position: 'absolute',
+        bottom: '50px',
+        left: '24px',
+        right: '24px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '0.8rem',
+        zIndex: 10010
+      }}>
         <div style={{
           fontFamily: 'Outfit, sans-serif',
-          fontSize: '1.25rem',
-          fontWeight: 700,
+          fontSize: '1.45rem',
+          fontWeight: 800,
           textAlign: 'center',
           color: getStatusColor(),
+          textShadow: '0 2px 5px rgba(0,0,0,0.9)',
           transition: 'color 0.3s ease'
         }}>
           {getChallengeInstructions()}
         </div>
 
         <div style={{
-          fontSize: '0.9rem',
-          color: 'var(--text-secondary)',
+          fontSize: '0.95rem',
+          color: '#fff',
           textAlign: 'center',
-          background: 'rgba(255,255,255,0.03)',
-          padding: '0.6rem 1.25rem',
-          borderRadius: '12px',
-          border: '1px solid rgba(255,255,255,0.05)',
-          minWidth: '280px'
+          background: 'rgba(18, 20, 28, 0.85)',
+          backdropFilter: 'blur(16px)',
+          padding: '0.8rem 1.5rem',
+          borderRadius: '14px',
+          border: '1px solid rgba(255,255,255,0.1)',
+          minWidth: '290px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.4)'
         }}>
           {feedbackMsg}
         </div>
 
-        {/* Step dots for signup */}
+        {/* Step progress dots for enrollment */}
         {mode === 'signup' && (
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.4rem' }}>
             {signupPoses.map((p, idx) => (
               <div
                 key={p}
                 style={{
-                  width: '10px',
-                  height: '10px',
+                  width: '12px',
+                  height: '12px',
                   borderRadius: '50%',
                   background: idx < currentSignupPoseIndex 
                     ? 'var(--status-green)' 
                     : idx === currentSignupPoseIndex 
                       ? 'var(--status-blue)' 
-                      : 'rgba(255,255,255,0.2)',
+                      : 'rgba(255,255,255,0.3)',
                   transition: 'background 0.3s ease'
                 }}
               />

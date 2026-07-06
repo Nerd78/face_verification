@@ -12,9 +12,35 @@ export default function App() {
   const [userSession, setUserSession] = useState(null); // stores JWT and User details
   const [sessionLogs, setSessionLogs] = useState([]);
   
-  const handleAuthSubmit = (data) => {
-    setUserData(data);
-    setShowCamera(true);
+  const [formLoading, setFormLoading] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const handleAuthSubmit = async (data) => {
+    setFormError('');
+    if (mode === 'login') {
+      setFormLoading(true);
+      try {
+        const apiHost = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+        const response = await fetch(`${apiHost}/api/v1/users/check-registered?username_or_email=${encodeURIComponent(data.username)}`);
+        const resData = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(resData.detail || 'Profile search failed');
+        }
+        
+        // Update username with exact canonical name
+        data.username = resData.username || data.username;
+        setUserData(data);
+        setShowCamera(true);
+      } catch (err) {
+        setFormError(err.message);
+      } finally {
+        setFormLoading(false);
+      }
+    } else {
+      setUserData(data);
+      setShowCamera(true);
+    }
   };
 
   const handleCaptureComplete = (result) => {
@@ -180,7 +206,8 @@ export default function App() {
                 onSubmit={handleAuthSubmit}
                 mode={mode}
                 setMode={setMode}
-                loading={false}
+                loading={formLoading}
+                externalError={formError}
               />
             )}
           </div>

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { UserPlus, LogIn, Mail, Lock, User } from 'lucide-react';
 
-export default function AuthForm({ onSubmit, mode, setMode, loading }) {
+export default function AuthForm({ onSubmit, mode, setMode, loading, externalError }) {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+
+  const displayError = error || externalError;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -82,9 +84,9 @@ export default function AuthForm({ onSubmit, mode, setMode, loading }) {
         {mode === 'signup' ? 'Create Secure Profile' : 'Biometric Access Verification'}
       </h2>
 
-      {error && (
+      {displayError && (
         <div className="alert alert-error" style={{ margin: 0 }}>
-          {error}
+          {displayError}
         </div>
       )}
 
