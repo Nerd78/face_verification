@@ -21,37 +21,17 @@ const CHALLENGES = ['smile', 'blink', 'left', 'right', 'up', 'down'];
 
 export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete, onCancel }) {
   const webcamRef = useRef(null);
-  const bufferRef = useRef([]); // Rolling buffer of successful frames: { imageSrc, score }
   
   // State Machine
-  const [currentState, setCurrentState] = useState(STATES.CAMERA_LOADING);
-  const [feedbackMsg, setFeedbackMsg] = useState('Starting camera...');
+  const [currentState, setCurrentState] = useState(STATES.FACE_DETECTED);
+  const [feedbackMsg, setFeedbackMsg] = useState('Position your face inside the capture area.');
   const [errorMessage, setErrorMessage] = useState('');
-  
-  // Active Challenge trackers
-  const [activeChallenge, setActiveChallenge] = useState('smile');
-  const activeChallengeRef = useRef('smile');
-  const [challengeProgress, setChallengeProgress] = useState(0); // 0 to 100%
   
   // Image captures collector
   const [capturedFrames, setCapturedFrames] = useState([]);
   
   const signupPoses = ['straight'];
   const [currentSignupPoseIndex, setCurrentSignupPoseIndex] = useState(0);
-  const currentSignupPoseIndexRef = useRef(0);
-  
-  // Stability timer (user holds still for 2 seconds) using Refs for continuous intervals
-  const stabilityStartTimeRef = useRef(null);
-  const [stabilityPercentage, setStabilityPercentage] = useState(0);
-
-  // Sync state to refs so the polling loop always has fresh data
-  useEffect(() => {
-    activeChallengeRef.current = activeChallenge;
-  }, [activeChallenge]);
-
-  useEffect(() => {
-    currentSignupPoseIndexRef.current = currentSignupPoseIndex;
-  }, [currentSignupPoseIndex]);
 
   // Status colors based on state
   const getStatusColor = () => {
@@ -73,167 +53,26 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
     }
   };
 
-  // Start webcam, choose a random challenge for login
-  useEffect(() => {
-    if (mode === 'login') {
-      const randomChallenge = CHALLENGES[Math.floor(Math.random() * CHALLENGES.length)];
-      setActiveChallenge(randomChallenge);
-    } else {
-      // For signup, our challenge is the pose variation itself (straight, left, right, up, down)
-      setActiveChallenge(signupPoses[0]);
-    }
-    setCurrentState(STATES.CAMERA_LOADING);
-    bufferRef.current = [];
-    stabilityStartTimeRef.current = null;
-    setStabilityPercentage(0);
-  }, [mode]);
-
-  // Main frame processing loop
-  useEffect(() => {
-    let isMounted = true;
-    let timer = null;
-
-    const processFrame = async () => {
-      // We read currentState directly from the ref or let it run
-      // Since uvicorn or API calls might take time, block if processing
-      if (!webcamRef.current) return;
-
-      const imageSrc = webcamRef.current.getScreenshot();
-      if (!imageSrc) {
-        if (isMounted) {
-          setFeedbackMsg('Camera starting...');
-        }
-        return;
-      }
-
-      // Read values from refs to avoid stale closures
-      const currentPoseIdx = currentSignupPoseIndexRef.current;
-      const currentTargetChallenge = mode === 'signup' ? signupPoses[currentPoseIdx] : activeChallengeRef.current;
-
-      try {
-        const response = await fetch(`${API_URL}/api/v1/challenge/verify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            challenge_type: currentTargetChallenge,
-            frame_data: imageSrc
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error('API server returned error');
-        }
-
-        const data = await response.json();
-
-        if (!isMounted) return;
-
-        if (data.success) {
-          setFeedbackMsg('Face aligned! Click the capture button to snap.');
-          setCurrentState(STATES.ACTIVE_CHALLENGE);
-        } else {
-          // Conditions failed, reset state/feedback
-          const msg = data.message || 'Adjust position';
-          setFeedbackMsg(msg);
-
-          if (msg.includes('No face')) {
-            setCurrentState(STATES.NO_FACE);
-          } else if (msg.includes('Move') || msg.includes('outside')) {
-            setCurrentState(STATES.ALIGNING_FACE);
-          } else if (msg.includes('blurry') || msg.includes('Lighting')) {
-            setCurrentState(STATES.QUALITY_CHECK);
-          } else {
-            setCurrentState(STATES.FACE_DETECTED);
-          }
-        }
-      } catch (err) {
-        console.error('Frame process error:', err);
-        if (isMounted) {
-          setFeedbackMsg('Align your face within the frame.');
-        }
-      }
-    };
-
-    // Poll every 350ms. Note: dependency array is empty so the interval is never reset
-    timer = setInterval(processFrame, 350);
-
-    return () => {
-      isMounted = false;
-      clearInterval(timer);
-    };
-  }, [mode]);
-
-  // Manual Shutter Capture trigger that executes backend verification
+  // Manual Shutter Capture trigger
   const triggerManualCapture = async () => {
     if (!webcamRef.current) return;
     const imageSrc = webcamRef.current.getScreenshot();
     if (!imageSrc) return;
 
-    setCurrentState(STATES.PROCESSING);
-    setFeedbackMsg('Verifying capture quality...');
     setErrorMessage('');
-
-    const currentPoseIdx = currentSignupPoseIndexRef.current;
-    const currentTargetChallenge = mode === 'signup' ? signupPoses[currentPoseIdx] : activeChallengeRef.current;
-
-    try {
-      const response = await fetch(`${API_URL}/api/v1/challenge/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          challenge_type: currentTargetChallenge,
-          frame_data: imageSrc
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('API server returned error');
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Success! Perform capture
-        handleCapture(imageSrc);
-      } else {
-        throw new Error(data.message || 'Verification failed. Make sure your face is visible and aligned.');
-      }
-    } catch (err) {
-      setCurrentState(STATES.NO_FACE);
-      setErrorMessage(err.message || 'Failed to verify face. Please try again.');
-      setFeedbackMsg('Capture rejected.');
-    }
-  };
-
-  // Capture frame handler
-  const handleCapture = (imageSrc) => {
-    setCurrentState(STATES.CAPTURING);
-    setFeedbackMsg('Capturing image...');
+    setCurrentState(STATES.PROCESSING);
+    setFeedbackMsg('Processing captured photo...');
 
     if (mode === 'signup') {
-      const updatedFrames = [...capturedFrames, imageSrc];
-      setCapturedFrames(updatedFrames);
-      
-      const nextIndex = currentSignupPoseIndex + 1;
-      if (nextIndex < signupPoses.length) {
-        // Move to the next pose challenge
-        setCurrentSignupPoseIndex(nextIndex);
-        setActiveChallenge(signupPoses[nextIndex]);
-        setCurrentState(STATES.FACE_DETECTED);
-        setFeedbackMsg(`Capture successful! Now look ${signupPoses[nextIndex]}`);
-      } else {
-        // All poses captured successfully! Send to backend signup route
-        submitSignup(updatedFrames);
-      }
+      // For enrollment, validate frame directly during submission
+      submitSignup([imageSrc]);
     } else {
-      // Login mode - captured single frame
+      // For login, validate frame directly during login
       submitLogin(imageSrc);
     }
   };
 
   const submitSignup = async (frames) => {
-    setCurrentState(STATES.PROCESSING);
-    setFeedbackMsg(isEnrollOnly ? 'Submitting biometric enrollment...' : 'Submitting enrollment data...');
     try {
       const endpoint = isEnrollOnly ? `${API_URL}/api/v1/users/enroll-face` : `${API_URL}/api/v1/signup`;
       const signupBody = isEnrollOnly ? {
@@ -257,21 +96,20 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.detail || 'Enrollment failed');
+        throw new Error(data.detail || 'Biometric validation failed. Make sure your face is visible, sharp, and centered.');
       }
 
       setCurrentState(STATES.SUCCESS);
-      setFeedbackMsg('Enrollment complete!');
+      setFeedbackMsg('Biometrics captured and enrolled successfully!');
       setTimeout(() => onComplete(data), 1500);
     } catch (err) {
-      setCurrentState(STATES.NO_FACE);
-      setErrorMessage(err.message || 'Failed during signup verification.');
+      setCurrentState(STATES.FACE_DETECTED);
+      setErrorMessage(err.message || 'Verification failed. Please try again.');
+      setFeedbackMsg('Capture rejected.');
     }
   };
 
   const submitLogin = async (frame) => {
-    setCurrentState(STATES.PROCESSING);
-    setFeedbackMsg('Authenticating profile...');
     try {
       const response = await fetch(`${API_URL}/api/v1/login`, {
         method: 'POST',
@@ -280,21 +118,22 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
           username_or_email: userData.username,
           password: userData.password,
           frame: frame,
-          challenge_completed: activeChallenge
+          challenge_completed: 'straight' // Default verification challenge
         })
       });
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.detail || 'Authentication failed');
+        throw new Error(data.detail || 'Verification failed. Make sure your face is centered and matches your registered profile.');
       }
 
       setCurrentState(STATES.SUCCESS);
       setFeedbackMsg(`Verified! Welcome ${data.token.user.username}`);
       setTimeout(() => onComplete(data), 1500);
     } catch (err) {
-      setCurrentState(STATES.NO_FACE);
-      setErrorMessage(err.message || 'Access Denied.');
+      setCurrentState(STATES.FACE_DETECTED);
+      setErrorMessage(err.message || 'Access Denied. Please try again.');
+      setFeedbackMsg('Capture rejected.');
     }
   };
 
@@ -364,7 +203,7 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
 
-        {/* Dynamic Vignette Glow around the screen edges */}
+        {/* Static Premium Vignette Overlay */}
         <div style={{
           position: 'absolute',
           top: 0,
@@ -372,15 +211,9 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
           width: '100%',
           height: '100%',
           pointerEvents: 'none',
-          boxShadow: `inset 0 0 100px rgba(${
-            currentState === STATES.ACTIVE_CHALLENGE || currentState === STATES.SUCCESS ? '16, 185, 129' :
-            currentState === STATES.FACE_DETECTED || currentState === STATES.QUALITY_CHECK ? '59, 130, 246' :
-            currentState === STATES.ALIGNING_FACE || currentState === STATES.NO_FACE ? '245, 158, 11' :
-            '107, 114, 128'
-          }, 0.2)`,
-          border: `5px solid ${getStatusColor()}`,
-          zIndex: 10006,
-          transition: 'all 0.3s ease'
+          boxShadow: 'inset 0 0 150px rgba(0, 0, 0, 0.7)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          zIndex: 10006
         }} />
 
         {/* Modern Biometric Capture Frame Bracket Target */}
@@ -395,39 +228,20 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
           borderRadius: '24px',
           zIndex: 10004,
           pointerEvents: 'none',
-          boxShadow: '0 0 40px rgba(0,0,0,0.4)',
-          transition: 'all 0.3s ease'
+          boxShadow: '0 0 40px rgba(0,0,0,0.5)'
         }}>
-          {/* Vertical dynamic sweep laser line */}
-          <div className="scanner-laser-line" style={{ '--laser-color': getStatusColor() }} />
+          {/* Vertical static sweep laser line */}
+          <div className="scanner-laser-line" style={{ '--laser-color': '#3b82f6' }} />
 
-          {/* Glowing tech-brackets at the corners */}
+          {/* Glowing tech-brackets at the corners (Static white/gray) */}
           {/* Top Left Anchor */}
-          <div style={{ position: 'absolute', top: '-3px', left: '-3px', width: '28px', height: '28px', borderTop: `4px solid ${getStatusColor()}`, borderLeft: `4px solid ${getStatusColor()}`, borderTopLeftRadius: '18px', transition: 'border-color 0.3s' }} />
+          <div style={{ position: 'absolute', top: '-3px', left: '-3px', width: '28px', height: '28px', borderTop: '4px solid rgba(255,255,255,0.7)', borderLeft: '4px solid rgba(255,255,255,0.7)', borderTopLeftRadius: '18px' }} />
           {/* Top Right Anchor */}
-          <div style={{ position: 'absolute', top: '-3px', right: '-3px', width: '28px', height: '28px', borderTop: `4px solid ${getStatusColor()}`, borderRight: `4px solid ${getStatusColor()}`, borderTopRightRadius: '18px', transition: 'border-color 0.3s' }} />
+          <div style={{ position: 'absolute', top: '-3px', right: '-3px', width: '28px', height: '28px', borderTop: '4px solid rgba(255,255,255,0.7)', borderRight: '4px solid rgba(255,255,255,0.7)', borderTopRightRadius: '18px' }} />
           {/* Bottom Left Anchor */}
-          <div style={{ position: 'absolute', bottom: '-3px', left: '-3px', width: '28px', height: '28px', borderBottom: `4px solid ${getStatusColor()}`, borderLeft: `4px solid ${getStatusColor()}`, borderBottomLeftRadius: '18px', transition: 'border-color 0.3s' }} />
+          <div style={{ position: 'absolute', bottom: '-3px', left: '-3px', width: '28px', height: '28px', borderBottom: '4px solid rgba(255,255,255,0.7)', borderLeft: '4px solid rgba(255,255,255,0.7)', borderBottomLeftRadius: '18px' }} />
           {/* Bottom Right Anchor */}
-          <div style={{ position: 'absolute', bottom: '-3px', right: '-3px', width: '28px', height: '28px', borderBottom: `4px solid ${getStatusColor()}`, borderRight: `4px solid ${getStatusColor()}`, borderBottomRightRadius: '18px', transition: 'border-color 0.3s' }} />
-
-          {/* Stability progress perimeter ring */}
-          {stabilityPercentage > 0 && (
-            <svg style={{ position: 'absolute', top: '-10px', left: '-10px', width: '460px', height: '520px' }}>
-              <rect
-                x="2"
-                y="2"
-                width="456"
-                height="516"
-                rx="22"
-                fill="none"
-                stroke="var(--status-green)"
-                strokeWidth="4"
-                strokeDasharray={`${(stabilityPercentage / 100) * 1944} 1944`}
-                style={{ transition: 'stroke-dasharray 0.1s linear' }}
-              />
-            </svg>
-          )}
+          <div style={{ position: 'absolute', bottom: '-3px', right: '-3px', width: '28px', height: '28px', borderBottom: '4px solid rgba(255,255,255,0.7)', borderRight: '4px solid rgba(255,255,255,0.7)', borderBottomRightRadius: '18px' }} />
         </div>
       </div>
 
@@ -444,10 +258,10 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
       }}>
         <div>
           <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 700, margin: 0, textShadow: '0 2px 4px rgba(0,0,0,0.8)', fontSize: '1.4rem' }}>
-            {mode === 'signup' ? 'Face Enrollment Setup' : 'Liveness Challenge'}
+            {mode === 'signup' ? 'Face Enrollment Setup' : 'Liveness Verification'}
           </h3>
           <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>
-            {mode === 'signup' ? `Pose ${currentSignupPoseIndex + 1} of 5` : 'Active challenge verification'}
+            Biometric verification target
           </span>
         </div>
         <button
@@ -468,27 +282,6 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
         </button>
       </div>
 
-      {/* Challenge title overlay */}
-      {currentState === STATES.ACTIVE_CHALLENGE && (
-        <div style={{
-          position: 'absolute',
-          top: '110px',
-          background: 'rgba(59, 130, 246, 0.95)',
-          color: 'white',
-          padding: '0.4rem 1.2rem',
-          borderRadius: '20px',
-          fontSize: '0.85rem',
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          letterSpacing: '1px',
-          boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
-          zIndex: 10015,
-          animation: 'pulse 1.5s infinite'
-        }}>
-          Challenge: {activeChallenge}
-        </div>
-      )}
-
       {/* Error alert HUD popup */}
       {errorMessage && (
         <div className="alert alert-error" style={{
@@ -508,8 +301,8 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
             <ShieldAlert size={18} /> Error
           </div>
           <div style={{ fontSize: '0.9rem', marginBottom: '0.75rem' }}>{errorMessage}</div>
-          <button onClick={resetCapture} className="btn-primary" style={{ padding: '0.5rem', fontSize: '0.875rem', background: 'white', color: '#ef4444' }}>
-            Retry Capture
+          <button onClick={() => { setErrorMessage(''); setFeedbackMsg('Position your face inside the capture area.'); }} className="btn-primary" style={{ padding: '0.5rem', fontSize: '0.875rem', background: 'white', color: '#ef4444' }}>
+            Try Again
           </button>
         </div>
       )}
@@ -562,11 +355,11 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
           fontSize: '1.45rem',
           fontWeight: 800,
           textAlign: 'center',
-          color: getStatusColor(),
+          color: '#fff',
           textShadow: '0 2px 5px rgba(0,0,0,0.9)',
           transition: 'color 0.3s ease'
         }}>
-          {getChallengeInstructions()}
+          {mode === 'signup' ? 'Face Enrollment Setup' : 'Face Verification Access'}
         </div>
 
         <div style={{
