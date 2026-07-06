@@ -1,0 +1,22 @@
+# Node
+node_modules/
+dist/
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints
+.venv/
+venv/
+env/
+
+# Docker & Volumes
+pgdata/
+insightface_cache/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: face-auth-db
+    restart: always
+    environment:
+      POSTGRES_DB: face_auth_db
+      POSTGRES_USER: face_auth_user
+      POSTGRES_PASSWORD: face_auth_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U face_auth_user -d face_auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: face-auth-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://face_auth_user:face_auth_password@db:5432/face_auth_db
+      - JWT_SECRET=super_secret_jwt_key_change_me_in_production_12345
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - REFRESH_TOKEN_EXPIRE_DAYS=7
+      - DUPLICATE_THRESHOLD=0.82
+      - MATCH_THRESHOLD=0.80
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - insightface_cache:/root/.insightface
+
+  frontend:
+    build: ./frontend
+    container_name: face-auth-frontend
+    restart: always
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  insightface_cache:
