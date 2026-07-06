@@ -129,42 +129,11 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
         if (!isMounted) return;
 
         if (data.success) {
-          // Frame passed alignment, quality, and challenge verification! Add to rolling best quality buffer in memory
-          bufferRef.current.push({
-            imageSrc: imageSrc,
-            score: data.quality_score || 0.0
-          });
-          if (bufferRef.current.length > 5) {
-            bufferRef.current.shift(); // Keep only the rolling window of the last 5 best frames
-          }
-
-          setFeedbackMsg('Hold still.');
-          setCurrentState(STATES.ACTIVE_CHALLENGE);
-
-          // Progress the stability indicator
-          if (stabilityStartTimeRef.current === null) {
-            stabilityStartTimeRef.current = Date.now();
-            setStabilityPercentage(0);
-          } else {
-            const elapsed = Date.now() - stabilityStartTimeRef.current;
-            const percentage = Math.min(100, (elapsed / 2000) * 100);
-            setStabilityPercentage(percentage);
-
-            if (elapsed >= 2000) {
-              // 2 seconds of continuous stability passed -> select the highest scoring frame from rolling buffer
-              const bestFrame = bufferRef.current.reduce((prev, curr) => (prev.score > curr.score) ? prev : curr, bufferRef.current[0]);
-              stabilityStartTimeRef.current = null;
-              setStabilityPercentage(0);
-              bufferRef.current = [];
-              handleCapture(bestFrame.imageSrc);
-            }
-          }
+          setFeedbackMsg('Capturing...');
+          setCurrentState(STATES.CAPTURING);
+          handleCapture(imageSrc);
         } else {
-          // Conditions failed, wipe buffer, reset stability timer and update state/feedback
-          bufferRef.current = [];
-          stabilityStartTimeRef.current = null;
-          setStabilityPercentage(0);
-
+          // Conditions failed, reset state/feedback
           const msg = data.message || 'Adjust position';
           setFeedbackMsg(msg);
 
