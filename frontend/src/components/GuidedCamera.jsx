@@ -30,6 +30,7 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
   
   // Active Challenge trackers
   const [activeChallenge, setActiveChallenge] = useState('smile');
+  const activeChallengeRef = useRef('smile');
   const [challengeProgress, setChallengeProgress] = useState(0); // 0 to 100%
   
   // Image captures collector
@@ -38,10 +39,20 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
   // Enrollment Poses tracker
   const signupPoses = ['straight', 'left', 'right', 'up', 'down'];
   const [currentSignupPoseIndex, setCurrentSignupPoseIndex] = useState(0);
+  const currentSignupPoseIndexRef = useRef(0);
   
-  // Stability timer (user holds still for 2 seconds)
-  const [stabilityStartTime, setStabilityStartTime] = useState(null);
+  // Stability timer (user holds still for 2 seconds) using Refs for continuous intervals
+  const stabilityStartTimeRef = useRef(null);
   const [stabilityPercentage, setStabilityPercentage] = useState(0);
+
+  // Sync state to refs so the polling loop always has fresh data
+  useEffect(() => {
+    activeChallengeRef.current = activeChallenge;
+  }, [activeChallenge]);
+
+  useEffect(() => {
+    currentSignupPoseIndexRef.current = currentSignupPoseIndex;
+  }, [currentSignupPoseIndex]);
 
   // Status colors based on state
   const getStatusColor = () => {
@@ -74,6 +85,8 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
     }
     setCurrentState(STATES.CAMERA_LOADING);
     bufferRef.current = [];
+    stabilityStartTimeRef.current = null;
+    setStabilityPercentage(0);
   }, [mode]);
 
   // Main frame processing loop
@@ -82,22 +95,21 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
     let timer = null;
 
     const processFrame = async () => {
-      if (!webcamRef.current || currentState === STATES.PROCESSING || currentState === STATES.SUCCESS || currentState === STATES.CAPTURING) {
-        return;
-      }
+      // We read currentState directly from the ref or let it run
+      // Since uvicorn or API calls might take time, block if processing
+      if (!webcamRef.current) return;
 
       const imageSrc = webcamRef.current.getScreenshot();
       if (!imageSrc) {
         if (isMounted) {
-          setCurrentState(STATES.CAMERA_LOADING);
           setFeedbackMsg('Camera starting...');
         }
         return;
       }
 
-      // Determine current challenge query
-      // If signup, check current pose angle. If login, check active challenge.
-      const currentTargetChallenge = mode === 'signup' ? signupPoses[currentSignupPoseIndex] : activeChallenge;
+      // Read values from refs to avoid stale closures
+      const currentPoseIdx = currentSignupPoseIndexRef.current;
+      const currentTargetChallenge = mode === 'signup' ? signupPoses[currentPoseIdx] : activeChallengeRef.current;
 
       try {
         const response = await fetch(`${API_URL}/api/v1/challenge/verify`, {
@@ -128,24 +140,21 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
           }
 
           setFeedbackMsg('Hold still.');
-          
-          if (currentState !== STATES.ACTIVE_CHALLENGE) {
-            setCurrentState(STATES.ACTIVE_CHALLENGE);
-          }
+          setCurrentState(STATES.ACTIVE_CHALLENGE);
 
           // Progress the stability indicator
-          if (stabilityStartTime === null) {
-            setStabilityStartTime(Date.now());
+          if (stabilityStartTimeRef.current === null) {
+            stabilityStartTimeRef.current = Date.now();
             setStabilityPercentage(0);
           } else {
-            const elapsed = Date.now() - stabilityStartTime;
+            const elapsed = Date.now() - stabilityStartTimeRef.current;
             const percentage = Math.min(100, (elapsed / 2000) * 100);
             setStabilityPercentage(percentage);
 
             if (elapsed >= 2000) {
               // 2 seconds of continuous stability passed -> select the highest scoring frame from rolling buffer
               const bestFrame = bufferRef.current.reduce((prev, curr) => (prev.score > curr.score) ? prev : curr, bufferRef.current[0]);
-              setStabilityStartTime(null);
+              stabilityStartTimeRef.current = null;
               setStabilityPercentage(0);
               bufferRef.current = [];
               handleCapture(bestFrame.imageSrc);
@@ -154,7 +163,7 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
         } else {
           // Conditions failed, wipe buffer, reset stability timer and update state/feedback
           bufferRef.current = [];
-          setStabilityStartTime(null);
+          stabilityStartTimeRef.current = null;
           setStabilityPercentage(0);
 
           const msg = data.message || 'Adjust position';
@@ -178,14 +187,14 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
       }
     };
 
-    // Poll every 350ms to ensure low server overhead and responsive UI
+    // Poll every 350ms. Note: dependency array is empty so the interval is never reset
     timer = setInterval(processFrame, 350);
 
     return () => {
       isMounted = false;
       clearInterval(timer);
     };
-  }, [currentState, currentSignupPoseIndex, activeChallenge, stabilityStartTime, mode]);
+  }, [mode]);
 
   // Capture frame handler
   const handleCapture = (imageSrc) => {
