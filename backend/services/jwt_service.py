@@ -1,20 +1,21 @@
 from datetime import datetime, timedelta
 from typing import Optional, Dict
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from backend.config import settings
-
-# Setup password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class JWTService:
     def hash_password(self, password: str) -> str:
-        """Hashes a raw password."""
-        return pwd_context.hash(password)
+        """Hashes a raw password using bcrypt directly."""
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verifies a plain password against a hashed one."""
-        return pwd_context.verify(plain_password, hashed_password)
+        """Verifies a plain password against a hashed one using bcrypt directly."""
+        try:
+            return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+        except Exception:
+            return False
 
     def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
         """Creates a short-lived access token."""
