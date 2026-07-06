@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     MIN_FACE_CONFIDENCE: float = 0.5
     MIN_BRIGHTNESS: float = 50.0  # Mean pixel brightness (0-255)
     MAX_BRIGHTNESS: float = 230.0
-    MIN_BLUR_LAPLACIAN_VAR: float = 80.0  # Higher var = sharper image
+    MIN_BLUR_LAPLACIAN_VAR: float = 15.0  # Higher var = sharper image
     MAX_POSE_YAW: float = 25.0  # Max degrees yaw for front shot
     MAX_POSE_PITCH: float = 20.0 # Max degrees pitch for front shot
     MAX_POSE_ROLL: float = 15.0  # Max degrees roll for front shot
