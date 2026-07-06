@@ -325,46 +325,71 @@ export default function GuidedCamera({ mode, userData, onComplete, onCancel }) {
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
 
-        {/* Guided SVG overlay */}
-        <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
-          <defs>
-            <mask id="camera-guide-mask">
-              <rect width="100%" height="100%" fill="white" />
-              {/* Centered oval cutout relative to the viewport */}
-              <ellipse cx="50%" cy="45%" rx="135" ry="180" fill="black" />
-            </mask>
-          </defs>
-          
-          {/* Semi-transparent Darkened overlay outside the oval */}
-          <rect width="100%" height="100%" fill="rgba(11, 12, 16, 0.82)" mask="url(#camera-guide-mask)" />
-          
-          {/* Status color border ring */}
-          <ellipse
-            cx="50%"
-            cy="45%"
-            rx="135"
-            ry="180"
-            fill="none"
-            stroke={getStatusColor()}
-            strokeWidth="4"
-            style={{ transition: 'stroke 0.3s ease' }}
-          />
+        {/* Dynamic Vignette Glow around the screen edges */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          boxShadow: `inset 0 0 100px rgba(${
+            currentState === STATES.ACTIVE_CHALLENGE || currentState === STATES.SUCCESS ? '16, 185, 129' :
+            currentState === STATES.FACE_DETECTED || currentState === STATES.QUALITY_CHECK ? '59, 130, 246' :
+            currentState === STATES.ALIGNING_FACE || currentState === STATES.NO_FACE ? '245, 158, 11' :
+            '107, 114, 128'
+          }, 0.2)`,
+          border: `5px solid ${getStatusColor()}`,
+          zIndex: 10006,
+          transition: 'all 0.3s ease'
+        }} />
 
-          {/* Animated stability progress arc */}
+        {/* Modern Biometric Capture Frame Bracket Target */}
+        <div style={{
+          position: 'absolute',
+          top: '45%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '320px',
+          height: '380px',
+          border: '1px dashed rgba(255, 255, 255, 0.15)',
+          borderRadius: '24px',
+          zIndex: 10004,
+          pointerEvents: 'none',
+          boxShadow: '0 0 40px rgba(0,0,0,0.4)',
+          transition: 'all 0.3s ease'
+        }}>
+          {/* Vertical dynamic sweep laser line */}
+          <div className="scanner-laser-line" style={{ '--laser-color': getStatusColor() }} />
+
+          {/* Glowing tech-brackets at the corners */}
+          {/* Top Left Anchor */}
+          <div style={{ position: 'absolute', top: '-3px', left: '-3px', width: '28px', height: '28px', borderTop: `4px solid ${getStatusColor()}`, borderLeft: `4px solid ${getStatusColor()}`, borderTopLeftRadius: '18px', transition: 'border-color 0.3s' }} />
+          {/* Top Right Anchor */}
+          <div style={{ position: 'absolute', top: '-3px', right: '-3px', width: '28px', height: '28px', borderTop: `4px solid ${getStatusColor()}`, borderRight: `4px solid ${getStatusColor()}`, borderTopRightRadius: '18px', transition: 'border-color 0.3s' }} />
+          {/* Bottom Left Anchor */}
+          <div style={{ position: 'absolute', bottom: '-3px', left: '-3px', width: '28px', height: '28px', borderBottom: `4px solid ${getStatusColor()}`, borderLeft: `4px solid ${getStatusColor()}`, borderBottomLeftRadius: '18px', transition: 'border-color 0.3s' }} />
+          {/* Bottom Right Anchor */}
+          <div style={{ position: 'absolute', bottom: '-3px', right: '-3px', width: '28px', height: '28px', borderBottom: `4px solid ${getStatusColor()}`, borderRight: `4px solid ${getStatusColor()}`, borderBottomRightRadius: '18px', transition: 'border-color 0.3s' }} />
+
+          {/* Stability progress perimeter ring */}
           {stabilityPercentage > 0 && (
-            <ellipse
-              cx="50%"
-              cy="45%"
-              rx="135"
-              ry="180"
-              fill="none"
-              stroke="var(--status-green)"
-              strokeWidth="4"
-              strokeDasharray={`${(stabilityPercentage / 100) * 1000} 1000`}
-              style={{ transition: 'stroke-dasharray 0.1s linear', transform: 'rotate(-90deg)', transformOrigin: 'center' }}
-            />
+            <svg style={{ position: 'absolute', top: '-10px', left: '-10px', width: '340px', height: '400px' }}>
+              <rect
+                x="2"
+                y="2"
+                width="336"
+                height="396"
+                rx="22"
+                fill="none"
+                stroke="var(--status-green)"
+                strokeWidth="4"
+                strokeDasharray={`${(stabilityPercentage / 100) * 1400} 1400`}
+                style={{ transition: 'stroke-dasharray 0.1s linear' }}
+              />
+            </svg>
           )}
-        </svg>
+        </div>
       </div>
 
       {/* Top Header Overlay */}
