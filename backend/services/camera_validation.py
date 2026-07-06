@@ -4,13 +4,13 @@ from backend.config import settings
 
 class CameraValidationService:
     def validate_face_presence(self, faces: list) -> Tuple[bool, str]:
-        """Validates that exactly one face is detected."""
-        face_count = len(faces)
-        if face_count == 0:
+        """
+        Validates presence of a face. If multiple faces are detected, we proceed
+        by focusing on the primary face.
+        """
+        if not faces or len(faces) == 0:
             return False, "No face detected"
-        if face_count > 1:
-            return False, "Multiple faces detected"
-        return True, "One face detected"
+        return True, "Face detected"
 
     def validate_alignment(self, face, img_w: int, img_h: int) -> Tuple[bool, str]:
         """

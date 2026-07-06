@@ -131,10 +131,10 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
             detail="Username or email already registered"
         )
         
-    if not (3 <= len(payload.frames) <= 5):
+    if not (1 <= len(payload.frames) <= 5):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Please provide between 3 and 5 verification frames"
+            detail="Please provide between 1 and 5 verification frames"
         )
 
     # Pose sequence mapping
@@ -358,10 +358,10 @@ def enroll_face(payload: EnrollFaceRequest, db: Session = Depends(get_db)):
             detail="Invalid credentials"
         )
         
-    if not (3 <= len(payload.frames) <= 5):
+    if not (1 <= len(payload.frames) <= 5):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Please provide between 3 and 5 verification frames"
+            detail="Please provide between 1 and 5 verification frames"
         )
 
     poses = ["straight", "left", "right", "up", "down"]

@@ -36,8 +36,7 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
   // Image captures collector
   const [capturedFrames, setCapturedFrames] = useState([]);
   
-  // Enrollment Poses tracker
-  const signupPoses = ['straight', 'left', 'right', 'up', 'down'];
+  const signupPoses = ['straight'];
   const [currentSignupPoseIndex, setCurrentSignupPoseIndex] = useState(0);
   const currentSignupPoseIndexRef = useRef(0);
   
@@ -380,8 +379,8 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
           top: '45%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          width: '320px',
-          height: '380px',
+          width: '440px',
+          height: '500px',
           border: '1px dashed rgba(255, 255, 255, 0.15)',
           borderRadius: '24px',
           zIndex: 10004,
@@ -404,17 +403,17 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
 
           {/* Stability progress perimeter ring */}
           {stabilityPercentage > 0 && (
-            <svg style={{ position: 'absolute', top: '-10px', left: '-10px', width: '340px', height: '400px' }}>
+            <svg style={{ position: 'absolute', top: '-10px', left: '-10px', width: '460px', height: '520px' }}>
               <rect
                 x="2"
                 y="2"
-                width="336"
-                height="396"
+                width="456"
+                height="516"
                 rx="22"
                 fill="none"
                 stroke="var(--status-green)"
                 strokeWidth="4"
-                strokeDasharray={`${(stabilityPercentage / 100) * 1400} 1400`}
+                strokeDasharray={`${(stabilityPercentage / 100) * 1944} 1944`}
                 style={{ transition: 'stroke-dasharray 0.1s linear' }}
               />
             </svg>
