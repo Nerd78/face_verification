@@ -88,27 +88,73 @@ class QualityService:
         return True, pose_data, f"Pose validation successful ({target_pose})"
 
     def run_all_quality_checks(self, img: np.ndarray, face, target_pose: str = "straight") -> Dict[str, Any]:
-        """Runs validation checks for brightness, blur, confidence, and pose."""
-        # Check detection confidence
+        """
+        Runs validation checks for brightness, blur, confidence, and pose.
+        Computes a frame quality score between 0 and 100.
+        """
         confidence = float(face.det_score) if hasattr(face, 'det_score') else 0.0
-        if confidence < settings.MIN_FACE_CONFIDENCE:
-            return {"success": False, "reason": "Low face confidence", "scores": {"confidence": confidence}}
-
         bright_ok, brightness, bright_msg = self.evaluate_brightness(img)
-        if not bright_ok:
-            return {"success": False, "reason": bright_msg, "scores": {"brightness": brightness, "confidence": confidence}}
-
         blur_ok, blur_score, blur_msg = self.evaluate_blur(img)
-        if not blur_ok:
-            return {"success": False, "reason": blur_msg, "scores": {"brightness": brightness, "blur": blur_score, "confidence": confidence}}
-
         pose_ok, pose_data, pose_msg = self.evaluate_pose(face, target_pose)
-        if not pose_ok:
-            return {"success": False, "reason": pose_msg, "scores": {"brightness": brightness, "blur": blur_score, "confidence": confidence, "pose": pose_data}}
+
+        # 1. Base Score calculation (Starts at 100)
+        score = 100.0
+
+        # Confidence deduction (up to 30 pts)
+        score -= (1.0 - confidence) * 30.0
+
+        # Brightness deduction (up to 20 pts)
+        if brightness < 80:
+            score -= (80 - brightness) * 0.4
+        elif brightness > 200:
+            score -= (brightness - 200) * 0.3
+
+        # Blur deduction (up to 30 pts)
+        if blur_score < settings.MIN_BLUR_LAPLACIAN_VAR:
+            # Under threshold, deduct points proportionally
+            score -= min(30.0, (settings.MIN_BLUR_LAPLACIAN_VAR - blur_score) * 0.5)
+        else:
+            # Over threshold, give small bonus for extra sharp images (max 5 pts)
+            score += min(5.0, (blur_score - settings.MIN_BLUR_LAPLACIAN_VAR) * 0.01)
+
+        # Pose deduction (up to 20 pts)
+        if pose_data:
+            yaw = abs(pose_data.get("yaw", 0))
+            pitch = abs(pose_data.get("pitch", 0))
+            roll = abs(pose_data.get("roll", 0))
+            
+            if target_pose == "straight":
+                score -= (yaw * 0.5 + pitch * 0.5 + roll * 0.5)
+            elif target_pose in ["left", "right"]:
+                # If target is left/right, we expect yaw to be ~15-30. If it deviates, deduct.
+                yaw_dev = abs(yaw - 20.0)
+                score -= (yaw_dev * 0.6 + pitch * 0.5 + roll * 0.5)
+            elif target_pose in ["up", "down"]:
+                pitch_dev = abs(pitch - 15.0)
+                score -= (yaw * 0.5 + pitch_dev * 0.6 + roll * 0.5)
+
+        # Ensure score is strictly between 0 and 100
+        final_score = max(0.0, min(100.0, score))
+
+        # Check if all critical checks are satisfied
+        critical_success = confidence >= settings.MIN_FACE_CONFIDENCE and bright_ok and blur_ok and pose_ok
+
+        # Determine highest-priority failure reason
+        reason = "All quality checks passed"
+        if not critical_success:
+            if confidence < settings.MIN_FACE_CONFIDENCE:
+                reason = "Low face confidence"
+            elif not bright_ok:
+                reason = bright_msg
+            elif not blur_ok:
+                reason = blur_msg
+            elif not pose_ok:
+                reason = pose_msg
 
         return {
-            "success": True,
-            "reason": "All quality checks passed",
+            "success": critical_success,
+            "reason": reason,
+            "quality_score": round(final_score, 1),
             "scores": {
                 "confidence": confidence,
                 "brightness": brightness,

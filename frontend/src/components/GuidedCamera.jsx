@@ -19,8 +19,9 @@ const STATES = {
 
 const CHALLENGES = ['smile', 'blink', 'left', 'right', 'up', 'down'];
 
-export default function GuidedCamera({ mode, userData, onComplete, onCancel }) {
+export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete, onCancel }) {
   const webcamRef = useRef(null);
+  const bufferRef = useRef([]); // Rolling buffer of successful frames: { imageSrc, score }
   
   // State Machine
   const [currentState, setCurrentState] = useState(STATES.CAMERA_LOADING);
@@ -72,6 +73,7 @@ export default function GuidedCamera({ mode, userData, onComplete, onCancel }) {
       setActiveChallenge(signupPoses[0]);
     }
     setCurrentState(STATES.CAMERA_LOADING);
+    bufferRef.current = [];
   }, [mode]);
 
   // Main frame processing loop
@@ -116,14 +118,22 @@ export default function GuidedCamera({ mode, userData, onComplete, onCancel }) {
         if (!isMounted) return;
 
         if (data.success) {
-          // Frame passed alignment, quality, and challenge verification!
-          setFeedbackMsg(data.message || 'Hold still...');
+          // Frame passed alignment, quality, and challenge verification! Add to rolling best quality buffer in memory
+          bufferRef.current.push({
+            imageSrc: imageSrc,
+            score: data.quality_score || 0.0
+          });
+          if (bufferRef.current.length > 5) {
+            bufferRef.current.shift(); // Keep only the rolling window of the last 5 best frames
+          }
+
+          setFeedbackMsg('Hold still.');
           
           if (currentState !== STATES.ACTIVE_CHALLENGE) {
             setCurrentState(STATES.ACTIVE_CHALLENGE);
           }
 
-          // Progress the challenge or stability indicator
+          // Progress the stability indicator
           if (stabilityStartTime === null) {
             setStabilityStartTime(Date.now());
             setStabilityPercentage(0);
@@ -133,14 +143,17 @@ export default function GuidedCamera({ mode, userData, onComplete, onCancel }) {
             setStabilityPercentage(percentage);
 
             if (elapsed >= 2000) {
-              // 2 seconds of continuous stability passed -> Capture!
+              // 2 seconds of continuous stability passed -> select the highest scoring frame from rolling buffer
+              const bestFrame = bufferRef.current.reduce((prev, curr) => (prev.score > curr.score) ? prev : curr, bufferRef.current[0]);
               setStabilityStartTime(null);
               setStabilityPercentage(0);
-              handleCapture(imageSrc);
+              bufferRef.current = [];
+              handleCapture(bestFrame.imageSrc);
             }
           }
         } else {
-          // Conditions failed, reset stability timer and update state/feedback
+          // Conditions failed, wipe buffer, reset stability timer and update state/feedback
+          bufferRef.current = [];
           setStabilityStartTime(null);
           setStabilityPercentage(0);
 
@@ -202,23 +215,31 @@ export default function GuidedCamera({ mode, userData, onComplete, onCancel }) {
 
   const submitSignup = async (frames) => {
     setCurrentState(STATES.PROCESSING);
-    setFeedbackMsg('Submitting enrollment data...');
+    setFeedbackMsg(isEnrollOnly ? 'Submitting biometric enrollment...' : 'Submitting enrollment data...');
     try {
-      const response = await fetch(`${API_URL}/api/v1/signup`, {
+      const endpoint = isEnrollOnly ? `${API_URL}/api/v1/users/enroll-face` : `${API_URL}/api/v1/signup`;
+      const signupBody = isEnrollOnly ? {
+        username_or_email: userData.username,
+        password: userData.password,
+        frames: frames,
+        challenges_completed: signupPoses
+      } : {
+        username: userData.username,
+        email: userData.email,
+        password: userData.password,
+        frames: frames,
+        challenges_completed: signupPoses
+      };
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: userData.username,
-          email: userData.email,
-          password: userData.password,
-          frames: frames,
-          challenges_completed: signupPoses
-        })
+        body: JSON.stringify(signupBody)
       });
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.detail || 'Signup failed');
+        throw new Error(data.detail || 'Enrollment failed');
       }
 
       setCurrentState(STATES.SUCCESS);

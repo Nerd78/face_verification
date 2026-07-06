@@ -50,5 +50,12 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     success: bool
     message: str
+    needs_enrollment: Optional[bool] = False
     similarity_score: Optional[float] = None
     token: Optional[Token] = None
+
+class EnrollFaceRequest(BaseModel):
+    username_or_email: str
+    password: str
+    frames: List[str]
+    challenges_completed: List[str]

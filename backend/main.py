@@ -10,7 +10,8 @@ from backend.database import engine, Base, get_db
 from backend.models import User, FaceEmbedding, LoginAttempt
 from backend.schemas import (
     SignupRequest, LoginRequest, LoginResponse, Token,
-    UserResponse, RefreshTokenRequest, BiometricChallengeCheck
+    UserResponse, RefreshTokenRequest, BiometricChallengeCheck,
+    EnrollFaceRequest
 )
 from backend.services.embedding_service import embedding_service
 from backend.services.camera_validation import camera_validation_service
@@ -60,7 +61,7 @@ def verify_live_challenge(payload: BiometricChallengeCheck):
         # 1. Check face presence
         ok, msg = camera_validation_service.validate_face_presence(faces)
         if not ok:
-            return {"success": False, "score": 0.0, "message": msg}
+            return {"success": False, "quality_score": 0.0, "message": msg}
             
         face = faces[0]
         h, w, _ = img.shape
@@ -68,20 +69,25 @@ def verify_live_challenge(payload: BiometricChallengeCheck):
         # 2. Check alignment & distance
         align_ok, align_msg = camera_validation_service.validate_alignment(face, w, h)
         if not align_ok:
-            return {"success": False, "score": 0.0, "message": align_msg}
+            return {"success": False, "quality_score": 0.0, "message": align_msg}
             
-        # 3. Check quality (blur & brightness)
-        brightness_ok, _, bright_msg = quality_service.evaluate_brightness(img)
-        if not brightness_ok:
-            return {"success": False, "score": 0.0, "message": bright_msg}
-            
-        blur_ok, _, blur_msg = quality_service.evaluate_blur(img)
-        if not blur_ok:
-            return {"success": False, "score": 0.0, "message": blur_msg}
-            
-        # 4. Check target active challenge
+        # 3. Check target active challenge
         res = challenge_service.verify_challenge(face, payload.challenge_type)
-        return res
+        if not res["success"]:
+            return {"success": False, "quality_score": 0.0, "message": res["message"]}
+            
+        # 4. Check all quality metrics to compute the numeric score
+        pose_target = payload.challenge_type if payload.challenge_type in ["left", "right", "up", "down"] else "straight"
+        q_res = quality_service.run_all_quality_checks(img, face, pose_target)
+        if not q_res["success"]:
+            return {"success": False, "quality_score": q_res["quality_score"], "message": q_res["reason"]}
+            
+        return {
+            "success": True,
+            "quality_score": q_res["quality_score"],
+            "message": "Challenge matched!",
+            "scores": q_res["scores"]
+        }
         
     except Exception as e:
         logger.error(f"Error in live challenge check: {str(e)}")
@@ -101,7 +107,13 @@ def check_user_registered(username_or_email: str, db: Session = Depends(get_db))
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Biometric profile not found. Please register first."
         )
-    return {"registered": True, "username": user.username}
+    # Check if they have enrolled embeddings
+    embedding_count = db.query(FaceEmbedding).filter(FaceEmbedding.user_id == user.id).count()
+    return {
+        "registered": True,
+        "username": user.username,
+        "has_embeddings": embedding_count > 0
+    }
 
 @app.post("/api/v1/signup", response_model=UserResponse)
 def signup(payload: SignupRequest, db: Session = Depends(get_db)):
@@ -236,6 +248,15 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
             detail="Invalid credentials"
         )
 
+    # Check if biometric face profile has been enrolled
+    embedding_count = db.query(FaceEmbedding).filter(FaceEmbedding.user_id == user.id).count()
+    if embedding_count == 0:
+        return LoginResponse(
+            success=False,
+            message="Your face capture is not completed. Directing to biometric setup...",
+            needs_enrollment=True
+        )
+
     try:
         # 2. Decode & check login frame
         img = embedding_service.base64_to_cv2(payload.frame)
@@ -323,6 +344,104 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to authenticate biometric input"
         )
+
+@app.post("/api/v1/users/enroll-face", response_model=LoginResponse)
+def enroll_face(payload: EnrollFaceRequest, db: Session = Depends(get_db)):
+    """
+    Enrolls face biometrics for an already registered user who has no embeddings.
+    """
+    # 1. Resolve User and verify passphrase
+    user = db.query(User).filter((User.username == payload.username_or_email) | (User.email == payload.username_or_email)).first()
+    if not user or not jwt_service.verify_password(payload.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+        
+    if not (3 <= len(payload.frames) <= 5):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide between 3 and 5 verification frames"
+        )
+
+    poses = ["straight", "left", "right", "up", "down"]
+    embeddings_to_save = []
+    quality_scores = []
+    
+    # 2. Process and validate all images
+    for i, base64_frame in enumerate(payload.frames):
+        target_pose = poses[i] if i < len(poses) else "straight"
+        try:
+            img = embedding_service.base64_to_cv2(base64_frame)
+            faces = embedding_service.detect_faces(img)
+            
+            presence_ok, presence_msg = camera_validation_service.validate_face_presence(faces)
+            if not presence_ok:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Frame {i+1} ({target_pose}): {presence_msg}")
+                
+            face = faces[0]
+            h, w, _ = img.shape
+            
+            align_ok, align_msg = camera_validation_service.validate_alignment(face, w, h)
+            if not align_ok:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Frame {i+1} ({target_pose}) alignment: {align_msg}")
+                
+            check_res = quality_service.run_all_quality_checks(img, face, target_pose)
+            if not check_res["success"]:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Frame {i+1} ({target_pose}) quality: {check_res['reason']}")
+                
+            embedding = embedding_service.extract_embedding(face)
+            if embedding is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Frame {i+1} ({target_pose}): Failed to extract vector representation")
+                
+            embeddings_to_save.append(embedding)
+            quality_scores.append(check_res["scores"].get("confidence", 1.0))
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error processing enrollment frame {i+1}: {str(e)}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Failed to process frame {i+1}")
+
+    # 3. 1:N Duplicate search
+    for idx, emb in enumerate(embeddings_to_save):
+        is_duplicate, max_sim, dup_id = matching_service.check_duplicate_enrollment(db, emb)
+        if is_duplicate and dup_id != user.id:
+            logger.warning(f"Enrollment rejected. User matches existing profile {dup_id} with similarity {max_sim:.3f}")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Face already enrolled under another profile. Similarity: {max_sim:.3f}"
+            )
+
+    # 4. Save Embeddings
+    for i, emb in enumerate(embeddings_to_save):
+        face_emb = FaceEmbedding(
+            user_id=user.id,
+            embedding=emb,
+            quality_score=quality_scores[i]
+        )
+        db.add(face_emb)
+        
+    db.commit()
+    logger.info(f"User {user.username} face profile enrolled successfully.")
+
+    # 5. Automatically log in user and return JWT
+    user_response = UserResponse.from_orm(user)
+    access_token = jwt_service.create_access_token(data={"sub": user.username})
+    refresh_token = jwt_service.create_refresh_token(data={"sub": user.username})
+    
+    token_payload = Token(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=user_response
+    )
+    
+    return LoginResponse(
+        success=True,
+        message="Biometrics enrolled and verified successfully",
+        similarity_score=1.0,
+        token=token_payload
+    )
 
 @app.post("/api/v1/logout")
 def logout():

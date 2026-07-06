@@ -14,6 +14,7 @@ export default function App() {
   
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
+  const [enrollOnLogin, setEnrollOnLogin] = useState(false);
 
   const handleAuthSubmit = async (data) => {
     setFormError('');
@@ -30,8 +31,13 @@ export default function App() {
         
         // Update username with exact canonical name
         data.username = resData.username || data.username;
+        const needsEnroll = !resData.has_embeddings;
+        setEnrollOnLogin(needsEnroll);
         setUserData(data);
         setShowCamera(true);
+        if (needsEnroll) {
+          alert('Face capture profile is not set up for this account. Starting biometric setup.');
+        }
       } catch (err) {
         setFormError(err.message);
       } finally {
@@ -46,12 +52,14 @@ export default function App() {
   const handleCaptureComplete = (result) => {
     setShowCamera(false);
     setUserData(null);
+    const wasEnrollOnLogin = enrollOnLogin;
+    setEnrollOnLogin(false);
     
-    if (mode === 'signup') {
+    if (mode === 'signup' && !wasEnrollOnLogin) {
       alert('Enrollment Successful! You can now log in using facial recognition.');
       setMode('login');
     } else {
-      // Login completed successfully
+      // Login or auto-enroll completed successfully
       setUserSession(result.token);
       // Save logs locally
       const log = {
@@ -196,10 +204,11 @@ export default function App() {
           <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
             {showCamera ? (
               <GuidedCamera
-                mode={mode}
+                mode={enrollOnLogin ? 'signup' : mode}
+                isEnrollOnly={enrollOnLogin}
                 userData={userData}
                 onComplete={handleCaptureComplete}
-                onCancel={() => { setShowCamera(false); setUserData(null); }}
+                onCancel={() => { setShowCamera(false); setUserData(null); setEnrollOnLogin(false); }}
               />
             ) : (
               <AuthForm
