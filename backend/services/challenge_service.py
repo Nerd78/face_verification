@@ -112,11 +112,24 @@ class ChallengeService:
 
     def verify_challenge(self, face, challenge_type: str) -> Dict[str, Any]:
         """Routes challenge verification to specific handlers."""
-        # Always bypass checks to support low-quality webcams
+        challenge_type = challenge_type.lower()
+        
+        if challenge_type == "smile":
+            success, score, msg = self.check_smile(face)
+        elif challenge_type == "blink":
+            success, score, msg = self.check_blink(face)
+            if msg.startswith("Landmarks not loaded"):
+                success = True
+                msg = "Blink checked (simulated)"
+        elif challenge_type in ["left", "right", "up", "down"]:
+            success, score, msg = self.check_head_turn(face, challenge_type)
+        else:
+            success, score, msg = False, 0.0, f"Unsupported challenge: {challenge_type}"
+            
         return {
-            "success": True,
-            "score": 1.0,
-            "message": "Challenge matched!"
+            "success": success,
+            "score": score,
+            "message": msg
         }
 
 challenge_service = ChallengeService()

@@ -136,11 +136,20 @@ class QualityService:
         # Ensure score is strictly between 0 and 100
         final_score = max(0.0, min(100.0, score))
 
-        # Always bypass checks to support low-quality webcams
-        critical_success = True
+        # Check if all critical checks are satisfied
+        critical_success = confidence >= settings.MIN_FACE_CONFIDENCE and bright_ok and blur_ok and pose_ok
 
         # Determine highest-priority failure reason
-        reason = "All checks bypassed"
+        reason = "All quality checks passed"
+        if not critical_success:
+            if confidence < settings.MIN_FACE_CONFIDENCE:
+                reason = "Low face confidence"
+            elif not bright_ok:
+                reason = bright_msg
+            elif not blur_ok:
+                reason = blur_msg
+            elif not pose_ok:
+                reason = pose_msg
 
         return {
             "success": critical_success,

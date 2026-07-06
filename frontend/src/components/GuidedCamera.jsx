@@ -129,9 +129,8 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
         if (!isMounted) return;
 
         if (data.success) {
-          setFeedbackMsg('Capturing...');
-          setCurrentState(STATES.CAPTURING);
-          handleCapture(imageSrc);
+          setFeedbackMsg('Face aligned! Click the capture button to snap.');
+          setCurrentState(STATES.ACTIVE_CHALLENGE);
         } else {
           // Conditions failed, reset state/feedback
           const msg = data.message || 'Adjust position';
@@ -150,7 +149,7 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
       } catch (err) {
         console.error('Frame process error:', err);
         if (isMounted) {
-          setFeedbackMsg('Connecting to backend...');
+          setFeedbackMsg('Align your face within the frame.');
         }
       }
     };
@@ -163,6 +162,48 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
       clearInterval(timer);
     };
   }, [mode]);
+
+  // Manual Shutter Capture trigger that executes backend verification
+  const triggerManualCapture = async () => {
+    if (!webcamRef.current) return;
+    const imageSrc = webcamRef.current.getScreenshot();
+    if (!imageSrc) return;
+
+    setCurrentState(STATES.PROCESSING);
+    setFeedbackMsg('Verifying capture quality...');
+    setErrorMessage('');
+
+    const currentPoseIdx = currentSignupPoseIndexRef.current;
+    const currentTargetChallenge = mode === 'signup' ? signupPoses[currentPoseIdx] : activeChallengeRef.current;
+
+    try {
+      const response = await fetch(`${API_URL}/api/v1/challenge/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challenge_type: currentTargetChallenge,
+          frame_data: imageSrc
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('API server returned error');
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Success! Perform capture
+        handleCapture(imageSrc);
+      } else {
+        throw new Error(data.message || 'Verification failed. Make sure your face is visible and aligned.');
+      }
+    } catch (err) {
+      setCurrentState(STATES.NO_FACE);
+      setErrorMessage(err.message || 'Failed to verify face. Please try again.');
+      setFeedbackMsg('Capture rejected.');
+    }
+  };
 
   // Capture frame handler
   const handleCapture = (imageSrc) => {
@@ -181,7 +222,7 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
         setCurrentState(STATES.FACE_DETECTED);
         setFeedbackMsg(`Capture successful! Now look ${signupPoses[nextIndex]}`);
       } else {
-        // All 5 poses captured successfully! Send to backend signup route
+        // All poses captured successfully! Send to backend signup route
         submitSignup(updatedFrames);
       }
     } else {
@@ -476,7 +517,7 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
       {/* Bottom HUD overlay for Guidance */}
       <div style={{
         position: 'absolute',
-        bottom: '50px',
+        bottom: '40px',
         left: '24px',
         right: '24px',
         display: 'flex',
@@ -485,6 +526,37 @@ export default function GuidedCamera({ mode, isEnrollOnly, userData, onComplete,
         gap: '0.8rem',
         zIndex: 10010
       }}>
+        {/* Shutter Capture Button */}
+        <button
+          onClick={triggerManualCapture}
+          disabled={currentState === STATES.PROCESSING || currentState === STATES.CAPTURING}
+          style={{
+            background: 'radial-gradient(circle, #3b82f6 0%, #2563eb 100%)',
+            color: 'white',
+            border: '4px solid rgba(255, 255, 255, 0.2)',
+            boxShadow: '0 0 20px rgba(59, 130, 246, 0.5)',
+            width: '76px',
+            height: '76px',
+            borderRadius: '50%',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s ease',
+            outline: 'none',
+            marginBottom: '0.5rem'
+          }}
+          onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.92)'}
+          onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          <div style={{
+            width: '28px',
+            height: '28px',
+            borderRadius: '50%',
+            background: 'white',
+            boxShadow: 'inset 0 0 5px rgba(0,0,0,0.3)'
+          }} />
+        </button>
         <div style={{
           fontFamily: 'Outfit, sans-serif',
           fontSize: '1.45rem',
