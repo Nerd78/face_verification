@@ -199,14 +199,19 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     ip_addr = request.client.host if request.client else None
     ua = request.headers.get("user-agent")
 
-    # 1. Resolve User
+    # 1. Resolve User and verify credentials
     user = db.query(User).filter((User.username == payload.username_or_email) | (User.email == payload.username_or_email)).first()
-    if not user:
+    
+    is_password_valid = False
+    if user and user.password_hash:
+        is_password_valid = jwt_service.verify_password(payload.password, user.password_hash)
+
+    if not user or not is_password_valid:
         # Save a failed login attempt with no user_id associated
         attempt = LoginAttempt(
-            user_id=None,
+            user_id=user.id if user else None,
             success=False,
-            failure_reason="User not found",
+            failure_reason="Invalid passphrase" if user else "User not found",
             similarity_score=0.0,
             ip_address=ip_addr,
             user_agent=ua

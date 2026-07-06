@@ -19,6 +19,10 @@ export default function AuthForm({ onSubmit, mode, setMode, loading }) {
       setError('Email is required');
       return;
     }
+    if (!password || password.length < 6) {
+      setError('Passphrase must be at least 6 characters');
+      return;
+    }
 
     onSubmit({ username, email, password });
   };
@@ -119,15 +123,16 @@ export default function AuthForm({ onSubmit, mode, setMode, loading }) {
 
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Lock size={16} /> Master Passphrase (Optional)
+            <Lock size={16} /> Master Passphrase
           </label>
           <input
             type="password"
             className="form-input"
-            placeholder="master security password"
+            placeholder="master security password (min 6 chars)"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={loading}
+            required
           />
         </div>
 

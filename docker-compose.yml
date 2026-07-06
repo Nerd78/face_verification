@@ -10,7 +10,7 @@ services:
       POSTGRES_USER: face_auth_user
       POSTGRES_PASSWORD: face_auth_password
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -24,7 +24,7 @@ services:
     container_name: face-auth-backend
     restart: always
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       - DATABASE_URL=postgresql://face_auth_user:face_auth_password@db:5432/face_auth_db
       - JWT_SECRET=super_secret_jwt_key_change_me_in_production_12345
@@ -36,7 +36,7 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - ./backend:/app
+      - ./backend:/app/backend
       - insightface_cache:/root/.insightface
 
   frontend:
@@ -46,7 +46,7 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=http://localhost:8001
     volumes:
       - ./frontend:/app
       - /app/node_modules

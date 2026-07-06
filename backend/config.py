@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     MAX_POSE_ROLL: float = 15.0  # Max degrees roll for front shot
     
     # Guide / Bounding Box Alignment
-    MIN_FACE_AREA_RATIO: float = 0.08  # Face bounding box area relative to image
-    MAX_FACE_AREA_RATIO: float = 0.45
+    MIN_FACE_AREA_RATIO: float = 0.03  # Face bounding box area relative to image
+    MAX_FACE_AREA_RATIO: float = 0.60
     
     class Config:
         env_file = ".env"

@@ -7,7 +7,7 @@ class UserBase(BaseModel):
     email: EmailStr
 
 class UserCreate(UserBase):
-    password: Optional[str] = None # Optional password for MFA or standard credentials
+    password: str = Field(..., min_length=6)
 
 class UserResponse(UserBase):
     id: int
@@ -37,12 +37,13 @@ class BiometricChallengeCheck(BaseModel):
 class SignupRequest(BaseModel):
     username: str
     email: EmailStr
-    password: Optional[str] = None
+    password: str = Field(..., min_length=6)
     frames: List[str]  # 3-5 base64 images (poses)
     challenges_completed: List[str]  # List of challenges completed during session
 
 class LoginRequest(BaseModel):
     username_or_email: str
+    password: str
     frame: str  # Base64 login face image
     challenge_completed: str # The challenge completed for verification
 

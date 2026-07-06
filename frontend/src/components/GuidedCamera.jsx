@@ -239,6 +239,7 @@ export default function GuidedCamera({ mode, userData, onComplete, onCancel }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username_or_email: userData.username,
+          password: userData.password,
           frame: frame,
           challenge_completed: activeChallenge
         })
@@ -346,7 +347,7 @@ export default function GuidedCamera({ mode, userData, onComplete, onCancel }) {
             <mask id="camera-guide-mask">
               <rect width="100%" height="100%" fill="white" />
               {/* Centered oval cutout */}
-              <ellipse cx="190" cy="190" rx="90" ry="120" fill="black" />
+              <ellipse cx="190" cy="190" rx="125" ry="155" fill="black" />
             </mask>
           </defs>
           
@@ -357,8 +358,8 @@ export default function GuidedCamera({ mode, userData, onComplete, onCancel }) {
           <ellipse
             cx="190"
             cy="190"
-            rx="90"
-            ry="120"
+            rx="125"
+            ry="155"
             fill="none"
             stroke={getStatusColor()}
             strokeWidth="4"
@@ -370,12 +371,12 @@ export default function GuidedCamera({ mode, userData, onComplete, onCancel }) {
             <ellipse
               cx="190"
               cy="190"
-              rx="90"
-              ry="120"
+              rx="125"
+              ry="155"
               fill="none"
               stroke="var(--status-green)"
               strokeWidth="4"
-              strokeDasharray={`${(stabilityPercentage / 100) * 660} 660`}
+              strokeDasharray={`${(stabilityPercentage / 100) * 885} 885`}
               style={{ transition: 'stroke-dasharray 0.1s linear', transform: 'rotate(-90deg)', transformOrigin: '190px 190px' }}
             />
           )}

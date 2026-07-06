@@ -19,9 +19,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -U pip setuptools wheel
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy application code into the backend subfolder
+COPY . ./backend
 
 EXPOSE 8000
 
-CMD ["uvicorn", "main.py:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
